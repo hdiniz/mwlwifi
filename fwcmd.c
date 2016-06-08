@@ -472,6 +472,18 @@ static void mwl_fwcmd_parse_beacon(struct mwl_priv *priv,
 				beacon_info->ie_vht_ptr += elen;
 			}
 			break;
+                case 107: //Interworking
+                        beacon_info->ie_interworking_len = (elen + 2);
+                        beacon_info->ie_interworking_ptr = (pos - 2);
+                        break;
+                case 108: //Advertisement Protocol
+                        beacon_info->ie_advertisement_len = (elen + 2);
+                        beacon_info->ie_advertisement_ptr = (pos - 2);
+                        break;
+                case 111: //Roaming Consortium
+                        beacon_info->ie_roaming_len = (elen + 2);
+                        beacon_info->ie_roaming_ptr = (pos - 2);
+                        break;
 		case WLAN_EID_VENDOR_SPECIFIC:
 			if ((pos[0] == 0x00) && (pos[1] == 0x50) &&
 			    (pos[2] == 0xf2)) {
@@ -490,6 +502,13 @@ static void mwl_fwcmd_parse_beacon(struct mwl_priv *priv,
 					beacon_info->ie_wsc_ptr = (pos - 2);
 				}
 			}
+                        if ((pos[0] == 0x50) && (pos[1] == 0x6F) &&    //Hotspot 2.0
+                                (pos[2] == 0x9A)) {
+                            if (pos[3] == 0x10) {
+                                beacon_info->ie_h20_len = (elen + 2);
+                                beacon_info->ie_h20_ptr = (pos - 2);
+                            }
+                        }
 			break;
 		default:
 			break;
@@ -541,7 +560,23 @@ static int mwl_fwcmd_set_ies(struct mwl_priv *priv, struct mwl_vif *mwl_vif)
 		ie_list_len_proprietary += mwl_vif->beacon_info.ie_wmm_len;
 	}
 
-	pcmd->ie_list_len_proprietary = cpu_to_le16(ie_list_len_proprietary);
+	memcpy(pcmd->ie_list_proprietary + ie_list_len_proprietary,
+                beacon->ie_h20_ptr, beacon->ie_h20_len);
+        ie_list_len_proprietary += beacon->ie_h20_len;
+
+        memcpy(pcmd->ie_list_proprietary + ie_list_len_proprietary,
+                beacon->ie_advertisement_ptr, beacon->ie_advertisement_len);
+        ie_list_len_proprietary += beacon->ie_advertisement_len;
+
+        memcpy(pcmd->ie_list_proprietary + ie_list_len_proprietary,
+                beacon->ie_interworking_ptr, beacon->ie_interworking_len);
+        ie_list_len_proprietary += beacon->ie_interworking_len;
+
+        memcpy(pcmd->ie_list_proprietary + ie_list_len_proprietary,
+                beacon->ie_roaming_ptr, beacon->ie_roaming_len);
+        ie_list_len_proprietary += beacon->ie_roaming_len;
+
+        pcmd->ie_list_len_proprietary = cpu_to_le16(ie_list_len_proprietary);
 
 	if (mwl_fwcmd_exec_cmd(priv, HOSTCMD_CMD_SET_IES)) {
 		mutex_unlock(&priv->fwcmd_mutex);
